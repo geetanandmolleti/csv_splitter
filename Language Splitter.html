@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Language Splitter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    /* Layout: one working column — load data, four language buckets as a row of tiles, preview table below. */
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --fg: #16202b;
+      --muted: #5d6b7a;
+      --line: #dde2e8;
+      --accent: #1f5f8b;
+      --accent-fg: #ffffff;
+      --accent-soft: #e4eef6;
+      --telugu: #c2410c;
+      --tamil: #7c3aed;
+      --kannada: #0f766e;
+      --hindi: #b45309;
+      --warn: #9a3412;
+      --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #11161c;
+        --surface: #19212a;
+        --fg: #e6ebf0;
+        --muted: #94a3b3;
+        --line: #2b3641;
+        --accent: #6cb2e4;
+        --accent-fg: #0b1620;
+        --accent-soft: #1b2c3a;
+        --telugu: #fb923c;
+        --tamil: #b197fc;
+        --kannada: #2dd4bf;
+        --hindi: #f5b14c;
+        --warn: #fdba74;
+        color-scheme: dark;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #11161c;
+      --surface: #19212a;
+      --fg: #e6ebf0;
+      --muted: #94a3b3;
+      --line: #2b3641;
+      --accent: #6cb2e4;
+      --accent-fg: #0b1620;
+      --accent-soft: #1b2c3a;
+      --telugu: #fb923c;
+      --tamil: #b197fc;
+      --kannada: #2dd4bf;
+      --hindi: #f5b14c;
+      --warn: #fdba74;
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+      padding-block: 28px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.9rem;
+      letter-spacing: -0.01em;
+      margin: 0;
+      text-wrap: balance;
+    }
+
+    .lede {
+      margin: 4px 0 0;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+
+    .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .drop {
+      border: 1.5px dashed var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px 18px;
+      transition: border-color .15s, background .15s;
+    }
+
+    .drop.over {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .drop .info {
+      flex: 1 1 260px;
+      min-width: 0;
+    }
+
+    .drop .info strong {
+      display: block;
+      font-weight: 600;
+    }
+
+    .drop .info span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .file-name {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      word-break: break-all;
+    }
+
+    .tag-example {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      margin-left: 6px;
+      vertical-align: 2px;
+    }
+
+    button,
+    .btn {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 7px;
+      padding: 9px 15px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--fg);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    button:hover,
+    .btn:hover {
+      border-color: var(--accent);
+    }
+
+    button:focus-visible,
+    .btn:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-color: var(--accent);
+    }
+
+    button.primary:hover {
+      filter: brightness(1.08);
+    }
+
+    button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    input[type=file] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    details.paste summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    details.paste textarea {
+      margin-top: 10px;
+      width: 100%;
+      min-height: 130px;
+      resize: vertical;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--fg);
+    }
+
+    details.paste .actions {
+      margin-top: 8px;
+    }
+
+    .error {
+      color: var(--warn);
+      font-weight: 500;
+    }
+
+    .buckets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 760px) {
+      .buckets {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .bucket {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      border-top: 4px solid var(--c);
+    }
+
+    .bucket[aria-pressed="true"] {
+      box-shadow: 0 0 0 2px var(--c);
+    }
+
+    .bucket .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .bucket .name {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.15rem;
+    }
+
+    .bucket .script {
+      color: var(--c);
+      font-size: 1.1rem;
+    }
+
+    .bucket .count {
+      font-family: var(--font-mono);
+      font-size: 1.6rem;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .bucket .count small {
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    .bucket .amt {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bucket .also {
+      font-size: 0.78rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    .bucket .row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: auto;
+    }
+
+    .bucket .row button {
+      padding: 6px 10px;
+      font-size: 0.82rem;
+    }
+
+    .preview {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+    }
+
+    .preview-head h2 {
+      font-size: 1rem;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+      max-height: 440px;
+      overflow-y: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.85rem;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+    }
+
+    td.num,
+    th.num {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    td.mono {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .lang-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 1px 8px;
+      border-radius: 99px;
+      border: 1px solid currentColor;
+    }
+
+    .empty {
+      padding: 26px 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .foot {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+      background: var(--fg);
+      color: var(--bg);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      max-width: calc(100% - 32px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="wrap">
+    <header>
+      <h1>Language Splitter</h1>
+      <p class="lede">Load your customer list and get separate CSV files for Telugu, Tamil and Kannada. Every other
+        language (Hindi, Marathi, blanks and the rest) goes into the Hindi file.</p>
+    </header>
+
+    <section class="drop" id="drop" aria-label="Load data">
+      <div class="info">
+        <strong>Drop a CSV or TSV file here</strong>
+        <span id="source">Showing <span class="file-name">sample data</span><span
+            class="tag-example">Example</span></span>
+      </div>
+      <div class="actions">
+        <label class="btn primary" for="file" tabindex="0" id="fileBtn"
+          style="background:var(--accent);color:var(--accent-fg);border-color:var(--accent)">Choose file</label>
+        <input type="file" id="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values">
+      </div>
+    </section>
+
+    <details class="paste" id="pasteBox">
+      <summary>Or paste rows copied from Excel / Google Sheets</summary>
+      <textarea id="pasteArea"
+        placeholder="Paste here, including the header row (#, phone, CUSTOMER_NAME, LANGUAGE, …)"></textarea>
+      <div class="actions"><button id="pasteGo" class="primary" type="button">Split pasted data</button></div>
+    </details>
+
+    <p class="error" id="error" hidden></p>
+
+    <section aria-label="Results" style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <span class="label" id="summary">—</span>
+        <button class="primary" id="zipBtn" type="button">Download all (.zip)</button>
+      </div>
+      <p class="error" id="saveStatus" role="status" hidden></p>
+      <div class="buckets" id="buckets"></div>
+    </section>
+
+    <section class="preview" aria-label="Preview">
+      <div class="preview-head">
+        <h2 id="previewTitle">Preview</h2>
+        <span class="foot">Click a language card to preview its rows</span>
+      </div>
+      <div class="table-scroll" id="tableWrap"></div>
+    </section>
+
+    <p class="foot">Your file is processed in this page only. Output files are comma-separated, UTF-8 (opens correctly
+      in Excel), with the # column renumbered from 1 in each file.</p>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    const BUCKETS = [
+      { key: "telugu", name: "Telugu", script: "తె", color: "var(--telugu)" },
+      { key: "tamil", name: "Tamil", script: "த", color: "var(--tamil)" },
+      { key: "kannada", name: "Kannada", script: "ಕ", color: "var(--kannada)" },
+      { key: "hindi", name: "Hindi + others", script: "हि", color: "var(--hindi)" },
+    ];
+    const SEPARATE = new Set(["telugu", "tamil", "kannada"]);
+
+    const SAMPLE = `#\tphone\tCUSTOMER_NAME\tLANGUAGE\tTOTAL_AMOUNT\tDUE_DATE\tDATE\tFINAL_ACCEPTANCE_DATE
+1\t+917901270401\tMALLADI BHAVANI SRI SAI LAVANYA\tTelugu\t1128\t3 October\t24 October\t26 October
+2\t+916206460087\tMD REHAN\tHindi\t635\t3 October\t24 October\t26 October
+3\t+917624970712\tSANIYA KHANNUM\tKannada\t375\t3 October\t24 October\t26 October
+4\t+917207784328\tPUSTY THARANI\tTelugu\t414\t3 October\t24 October\t26 October
+5\t+917993366036\tGANDARAPU PREETHI\tTamil\t2482\t3 October\t24 October\t26 October
+6\t+919932812276\tJUHI SINGH\tHindi\t1049\t3 October\t24 October\t26 October
+7\t+919508278812\tGOVINDA KUMAR\tHindi\t656\t3 October\t24 October\t26 October
+8\t+919311036296\tSUNNY KUMAR\tHindi\t387\t3 October\t24 October\t26 October
+9\t+918607744968\tNARESH KUMAR\tHindi\t403\t3 October\t24 October\t26 October
+10\t+918999873819\tTANUJA SUJIT CHAVAN\tHindi\t338\t3 October\t24 October\t26 October
+11\t+919725425788\tSHEETAL NITIN NITIN PATIL\tHindi\t1023\t3 October\t24 October\t26 October`;
+
+    let state = { base: "customers", header: [], langIdx: -1, amtIdx: -1, groups: {}, others: {}, total: 0, active: "telugu" };
+
+    /* ---------- parsing ---------- */
+    function detectDelimiter(text) {
+      const first = text.split(/\r?\n/).find(l => l.trim()) || "";
+      const counts = { "\t": 0, ",": 0, ";": 0, "|": 0 };
+      let q = false;
+      for (const ch of first) { if (ch === '"') q = !q; else if (!q && ch in counts) counts[ch]++; }
+      return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][1] > 0
+        ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] : ",";
+    }
+    function parseDelimited(text, d) {
+      const rows = []; let row = [], f = "", q = false;
+      text = text.replace(/^﻿/, "");
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (q) {
+          if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+          else f += c;
+        } else if (c === '"' && f === "") q = true;
+        else if (c === d) { row.push(f); f = ""; }
+        else if (c === "\n" || c === "\r") {
+          if (c === "\r" && text[i + 1] === "\n") i++;
+          row.push(f); rows.push(row); row = []; f = "";
+        } else f += c;
+      }
+      if (f !== "" || row.length) { row.push(f); rows.push(row); }
+      return rows.filter(r => r.some(v => v.trim() !== ""));
+    }
+    function toCSV(header, rows) {
+      const esc = v => { v = v == null ? "" : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      return "﻿" + [header, ...rows].map(r => r.map(esc).join(",")).join("\r\n") + "\r\n";
+    }
+
+    /* ---------- splitting ---------- */
+    function process(text, name, isSample) {
+      const err = document.getElementById("error");
+      err.hidden = true;
+      const rows = parseDelimited(text, detectDelimiter(text));
+      if (rows.length < 2) return showError("No data rows found. Make sure the first row is the header and there is at least one customer row.");
+      const header = rows[0].map(h => h.trim());
+      const langIdx = header.findIndex(h => h.toLowerCase() === "language");
+      if (langIdx < 0) return showError(`No LANGUAGE column found. The columns in this file are: ${header.join(", ")}.`);
+      const amtIdx = header.findIndex(h => h.toLowerCase() === "total_amount");
+      const hashIdx = header.indexOf("#");
+
+      const groups = { telugu: [], tamil: [], kannada: [], hindi: [] };
+      const others = {};
+      for (const r of rows.slice(1)) {
+        while (r.length < header.length) r.push("");
+        const raw = (r[langIdx] || "").trim();
+        const l = raw.toLowerCase();
+        const key = SEPARATE.has(l) ? l : "hindi";
+        if (key === "hindi" && l !== "hindi") { const k = raw || "(blank)"; others[k] = (others[k] || 0) + 1; }
+        groups[key].push(r.slice(0, header.length));
+      }
+      if (hashIdx >= 0) for (const k in groups) groups[k].forEach((r, i) => r[hashIdx] = String(i + 1));
+
+      state = { ...state, base: name, header, langIdx, amtIdx, groups, others, total: rows.length - 1 };
+      if (!groups[state.active].length) state.active = BUCKETS.find(b => groups[b.key].length)?.key || "telugu";
+      document.getElementById("source").innerHTML = isSample
+        ? 'Showing <span class="file-name">sample data</span><span class="tag-example">Example</span>'
+        : `Loaded <span class="file-name"></span>`;
+      if (!isSample) document.querySelector("#source .file-name").textContent = name;
+      render();
+    }
+    function showError(msg) { const e = document.getElementById("error"); e.textContent = msg; e.hidden = false; }
+
+    /* ---------- rendering ---------- */
+    const fmtINR = n => "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    function sumAmt(rows) {
+      if (state.amtIdx < 0) return null;
+      return rows.reduce((s, r) => s + (parseFloat(String(r[state.amtIdx]).replace(/[,₹\s]/g, "")) || 0), 0);
+    }
+    function fileName(key) { return `${state.base}_${key}.csv`; }
+
+    function render() {
+      document.getElementById("summary").textContent = `${state.total} customers · 4 files`;
+      const wrap = document.getElementById("buckets");
+      wrap.innerHTML = "";
+      for (const b of BUCKETS) {
+        const rows = state.groups[b.key] || [];
+        const amt = sumAmt(rows);
+        const card = document.createElement("div");
+        card.className = "bucket"; card.style.setProperty("--c", b.color);
+        card.setAttribute("role", "button"); card.tabIndex = 0;
+        card.setAttribute("aria-pressed", String(state.active === b.key));
+        let also = "";
+        if (b.key === "hindi") {
+          const o = Object.entries(state.others);
+          also = o.length ? "Includes " + o.map(([k, v]) => `${k} ${v}`).join(", ") : "No other languages found";
+        }
+        card.innerHTML = `
+      <div class="head"><span class="name"></span><span class="script" aria-hidden="true"></span></div>
+      <div class="count">${rows.length}<small>${rows.length === 1 ? "row" : "rows"}</small></div>
+      <div class="amt">${amt == null ? "&nbsp;" : fmtINR(amt) + " due"}</div>
+      <div class="also"></div>
+      <div class="row"><button type="button" class="dl">Download CSV</button><button type="button" class="cp">Copy</button></div>`;
+        card.querySelector(".name").textContent = b.name;
+        card.querySelector(".script").textContent = b.script;
+        card.querySelector(".also").textContent = also;
+        const dl = card.querySelector(".dl");
+        dl.disabled = !rows.length;
+        dl.addEventListener("click", e => { e.stopPropagation(); saveOne(b.key); });
+        const cp = card.querySelector(".cp");
+        cp.disabled = !rows.length;
+        cp.addEventListener("click", e => { e.stopPropagation(); copyOne(b.key); });
+        const pick = () => { state.active = b.key; render(); };
+        card.addEventListener("click", pick);
+        card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+        wrap.appendChild(card);
+      }
+      document.getElementById("zipBtn").disabled = !state.total;
+      renderTable();
+    }
+
+    function renderTable() {
+      const b = BUCKETS.find(x => x.key === state.active);
+      const rows = state.groups[b.key] || [];
+      document.getElementById("previewTitle").textContent = `${fileName(b.key)} · ${rows.length} rows`;
+      const tw = document.getElementById("tableWrap");
+      if (!rows.length) { tw.innerHTML = `<div class="empty">No ${b.name} customers in this file.</div>`; return; }
+      const numCols = new Set(state.header.map((h, i) => (h === "#" || h.toLowerCase() === "total_amount") ? i : -1));
+      const t = document.createElement("table");
+      const thead = t.createTHead().insertRow();
+      state.header.forEach((h, i) => { const th = document.createElement("th"); th.textContent = h; if (numCols.has(i)) th.className = "num"; thead.appendChild(th); });
+      const tb = t.createTBody();
+      for (const r of rows.slice(0, 500)) {
+        const tr = tb.insertRow();
+        r.forEach((v, i) => {
+          const td = tr.insertCell();
+          if (i === state.langIdx) { const p = document.createElement("span"); p.className = "lang-pill"; p.style.color = b.color; p.textContent = v || "(blank)"; td.appendChild(p); }
+          else { td.textContent = v; if (numCols.has(i)) td.className = "num"; else if (/^\+?\d{8,}$/.test(v)) td.className = "mono"; }
+        });
+      }
+      tw.innerHTML = ""; tw.appendChild(t);
+      if (rows.length > 500) { const m = document.createElement("div"); m.className = "empty"; m.textContent = `Showing the first 500 of ${rows.length} rows. The download has all of them.`; tw.appendChild(m); }
+    }
+
+    /* ---------- downloads ---------- */
+    function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2600); }
+    function setStatus(msg) { const s = document.getElementById("saveStatus"); s.textContent = msg; s.hidden = !msg; }
+    function handleSaveError(e) {
+      const code = e?.code || "unknown";
+      if (code === "declined") return setStatus("Save cancelled. Click Download CSV again and choose Save in the confirmation.");
+      if (code === "rate_limited") return setStatus("A save confirmation is already open. Answer it first, then try again.");
+      setStatus(`Download didn't work in this view (${code}${e?.message ? ": " + e.message : ""}). Open the page full screen from its card, or use Copy and paste into Excel.`);
+    }
+    async function copyOne(key) {
+      const tsv = [state.header, ...state.groups[key]].map(r => r.map(v => String(v ?? "").replace(/[\t\r\n]/g, " ")).join("\t")).join("\n");
+      try { await navigator.clipboard.writeText(tsv); setStatus(""); toast(`Copied ${state.groups[key].length} rows. Paste into Excel or Google Sheets.`); }
+      catch { const ta = document.getElementById("pasteArea"); document.getElementById("pasteBox").open = true; ta.value = tsv; ta.focus(); ta.select(); setStatus("Couldn't copy automatically. The rows are selected in the box below; press Ctrl+C (Cmd+C on Mac)."); }
+    }
+    async function saveOne(key) {
+      try {
+        downloadBlob(fileName(key), new Blob([toCSV(state.header, state.groups[key])], { type: "text/csv;charset=utf-8" }));
+        setStatus(""); toast(`Saved ${fileName(key)}`);
+      } catch (e) { handleSaveError(e); }
+    }
+    document.getElementById("zipBtn").addEventListener("click", async () => {
+      if (typeof JSZip === "undefined") return setStatus("The zip tool didn't load. Use the Download CSV button on each card instead.");
+      const zip = new JSZip();
+      for (const b of BUCKETS) zip.file(fileName(b.key), toCSV(state.header, state.groups[b.key]));
+      const blob = await zip.generateAsync({ type: "blob" });
+      try { downloadBlob(`${state.base}_by_language.zip`, blob); setStatus(""); toast("Saved all 4 files"); }
+      catch (e) { handleSaveError(e); }
+    });
+
+    /* ---------- input ---------- */
+    function readFile(file) {
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => process(String(r.result), file.name.replace(/\.[^.]+$/, "") || "customers", false);
+      r.onerror = () => showError("Couldn't read that file. Try saving it again as CSV and reloading it.");
+      r.readAsText(file);
+    }
+    document.getElementById("file").addEventListener("change", e => { readFile(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("fileBtn").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); document.getElementById("file").click(); } });
+    const drop = document.getElementById("drop");
+    ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", e => readFile(e.dataTransfer.files[0]));
+    document.getElementById("pasteGo").addEventListener("click", () => {
+      const v = document.getElementById("pasteArea").value;
+      if (!v.trim()) return showError("Paste your rows into the box first, including the header row.");
+      process(v, "pasted", false);
+    });
+
+    function downloadBlob(name, blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    process(SAMPLE, "customers", true);
+  </script>
+</body>
+
+</html>
